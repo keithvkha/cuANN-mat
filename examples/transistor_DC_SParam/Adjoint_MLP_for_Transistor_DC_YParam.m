@@ -1,0 +1,221 @@
+%{
+This example shows the setup of an Adjoint Neural Net (MLP in this case)
+that uses the data of both DC and small-signal Y-parameters of a transistor
+for better generalization of the ANN model.
+
+For more information of the theory of Adjoint Neural Net, please refer to
+the reference:
+[1] 
+
+The script is written to be treated as a Text User Interface for all the
+operations, including:
+    - Importing training data (validation data and test data won't be
+    included here)
+    - Processing data
+    - Setting up the Adjoint MLP
+    - Training the Adjoint MLP using Levenberg-Marquardt algorithm
+
+User can treat each line of code as a button by highlighting each line and
+running it.
+
+It is recommended that the user runs the script line by line, or executes
+selections or chunks of code to see what the script is doing.
+
+- Keith Ha (Feb 2023)
+
+%}
+
+%% Adding Search Path for MATLAB
+addpath(fullfile('..', '..', 'core'));      % folder containing core Neural Net structures
+addpath(fullfile('..', '..', 'tools'));      % folder containing other misc tools for data processing, signal processing
+
+%% Data import for DC
+dataFileDC = fullfile('trainingData', 'FET_DC_Ids_vs_Vds_over_Vgs.csv');
+dataTableDC = readtable(dataFileDC);
+
+Ids_table = dataTableDC(:,'DC_IDS_i_0____');
+Ids_vec = table2array(Ids_table);       % unit: A
+
+% Clean up/Garbage collection of the variables that won't used in the rest
+% of the script
+clear('dataFileDC', 'Ids_table');
+
+
+%% Data import for YParam Y21
+% real(Y21) = dIds/dVgs = gm
+dataFileY21 = fullfile('trainingData', 'FET_Y21_real_freq_1GHz_over_Vds_Vgs.csv');
+dataTableY21 = readtable(dataFileY21);
+
+Y21real_table = dataTableY21(:,'real_Y_2_1___0_0____');
+Y21real_vec = table2array(Y21real_table);
+
+clear('dataFileY21', 'Y21real_table');
+
+%% Data import for YParam Y22
+% real(Y22) = dIds/dVds = 1/Zout
+dataFileY22 = fullfile('trainingData', 'FET_Y22_real_freq_1GHz_over_Vds_Vgs.csv');
+dataTableY22 = readtable(dataFileY22);
+
+Y22real_table = dataTableY22(:,'real_Y_2_2___0_0____');
+Y22real_vec = table2array(Y22real_table);
+
+clear('datafileY22', 'Y22real_table');
+
+
+
+%% DC data processing and plotting
+Vds = (0:0.1:5)';
+Vgs = (-2:0.1:1)';
+
+Ids = reshape(Ids_vec, length(Vds), length(Vgs));
+figure; plot(Vds, Ids);
+xlabel('Vds'); ylabel('Ids');
+title('Training Data');
+
+%% Y21 data processing
+freq = 1e9;
+
+Y21real = reshape(Y21real_vec, length(Vds), length(Vgs));
+
+figure; plot(Vgs, Y21real);
+xlabel('Vgs'); ylabel('real(Y21)');
+title('Training Data');
+
+figure; plot(Vds, Y21real);
+xlabel('Vds'); ylabel('real(Y21)');
+title('Training Data');
+
+
+%% Y22 data processing
+freq = 1e9;
+
+Y22real = reshape(Y22real_vec, length(Vds), length(Vgs));
+figure; plot(Vds, Y22real);
+xlabel('Vds'); ylabel('real(Y22)');
+title('Training Data');
+figure; plot(Vgs, Y22real);
+xlabel('Vgs'); ylabel('real(Y22)');
+title('Training Data');
+
+
+%% Putting all the DC, Y21, Y22 data together
+% All the imported data will be used for training 
+[Vgs_grid, Vds_grid] = meshgrid(Vgs, Vds);
+
+Vgs_vec = reshape(Vgs_grid, [], 1);
+Vds_vec = reshape(Vds_grid, [], 1);
+
+xdata = [Vgs_vec, Vds_vec];
+numSamples = size(xdata,1);
+
+% The training output data must be in the columns w.r.t the input data
+% i.e.
+% Y21real = dIds/dVgs, which is w.r.t to Vgs
+% Y22real = dIds/dVds, which is w.r.t to Vds
+ddata = [Ids_vec, Y21real_vec, Y22real_vec];
+
+data = [xdata ddata];
+
+%% Adjoint Neural Net setup
+% Reset the Neural Net if there's any existing
+clear('numInputNeurons', 'numNeuronsHLayers', 'numOutputNeurons', ...
+    'lengthWVec', 'mlp', ...
+    'neuronStruct', 'adjointStruct');
+
+% Neural Net settings
+% These settings are for the conventional MLP side of the Adjoint Neural
+% Net
+% Multiple Hidden Layers can be added by making numNeuronsHLayers an array
+numInputNeurons = 2;    % Vgs, Vds
+numNeuronsHLayers(1) = 10;
+numNeuronsHLayers(2) = 10;
+numOutputNeurons = 1;   % Ids
+
+% Calculating the number of weights + biases (aka parameters) based on the 
+% specified number of neurons
+if length(numNeuronsHLayers) == 1       % shallow/3-layer neural net
+    hl = 1;
+    lengthWVec = numNeuronsHLayers(1)*(numInputNeurons+1) + numOutputNeurons*(numNeuronsHLayers(hl)+1);
+
+else                                    % Multi hidden layers
+    lengthWVec = numNeuronsHLayers(1)*(numInputNeurons+1);
+    for hl = 2:length(numNeuronsHLayers)
+        lengthWVec = lengthWVec + numNeuronsHLayers(hl)*(numNeuronsHLayers(hl-1)+1);
+    end
+    lengthWVec = lengthWVec + numOutputNeurons*(numNeuronsHLayers(hl)+1);
+end
+
+% Intialize weights and biases
+w0_vec = randn(lengthWVec,1);
+
+% Compile all the structure settings into one struct to easily throw into
+% the MLP function
+% Adjoint Neural Net also has additional settings for selecting which
+% output neurons to be used or not used, in case there is no data available
+% for that output
+neuronStruct.numInputNeurons = numInputNeurons;
+neuronStruct.numNeuronsHLayers = numNeuronsHLayers;
+neuronStruct.numOutputNeurons = numOutputNeurons;
+neuronStruct.outputSelections = 1;      % Ids
+
+adjointStruct.xDeriv_mat = diag(1);      
+adjointStruct.outputSelections = [1 1];
+% For example, 
+% for outputSelections = [1 1], the adjointOutput will be [dIds/dVgs dId/dVds]
+% outputSelections = [1 0], the adjointOutput will be [dIds/dVgs 0]
+% outputSelections = [0 1], the adjointOutput will be [0 dIds/dVds]
+
+mlpAdjoint = @(w_vec, x) MLP_Adjoint_tanh(w_vec, x, neuronStruct, adjointStruct);
+
+[y0_tr_vec, wlayers, ajwlayers, hlayers] = mlpAdjoint(w0_vec, xdata); 
+
+%% Training algo (Levenberg-Marquardt)
+options = optimoptions('lsqcurvefit','Algorithm','levenberg-marquardt', 'Display', 'iter-detailed');
+% options.MaxFunctionEvaluations = lengthWVec*1000;
+lb = [];        % no lower bound or upper bound
+ub = [];
+
+[wTr_vec,resnorm,residual,exitflag,output] = lsqcurvefit(mlpAdjoint, w0_vec, xdata, ddata, lb, ub, options);
+
+% Saving training results and all imported data
+save(fullfile('matData', 'results.mat'));
+
+%% Training results
+mlpAdjoint = @(w_vec, x) MLP_Adjoint_tanh(w_vec, x, neuronStruct, adjointStruct);
+[y_md_vec, wlayers, ajwlayers, hlayers] = mlpAdjoint(wTr_vec, xdata); 
+
+Ids_md = reshape(y_md_vec(:,1), length(Vds), length(Vgs));
+Y21real_md = reshape(y_md_vec(:,2), length(Vds), length(Vgs));
+Y22real_md = reshape(y_md_vec(:,3), length(Vds), length(Vgs));
+
+% Plot DC Ids vs. Vds over Vgs
+figure; plot(Vds, Ids_md);
+hold on; plot(Vds, Ids);
+title('Model vs. All DC Data');
+
+% Plot small-signal gm vs. Vgs
+figure; plot(Vgs, Y21real_md);
+hold on; plot(Vgs, Y21real);
+xlabel('Vgs'); ylabel('real(Y21)');
+title('Model vs. All Y21 Data');
+
+% Plot small-signal gm vs. Vds
+figure; plot(Vds, Y21real_md);
+hold on; plot(Vds, Y21real);
+xlabel('Vds'); ylabel('real(Y21)');
+title('Model vs. All Y21 Data');
+
+% Plot Y22 vs. Vgs
+figure; plot(Vgs, Y22real_md);
+hold on; plot(Vgs, Y22real);
+xlabel('Vgs'); ylabel('real(Y22)');
+title('Model vs. All Y22 Data');
+
+% Plot Y22 vs. Vds
+figure; plot(Vds, Y22real_md);
+hold on; plot(Vds, Y22real);
+xlabel('Vds'); ylabel('real(Y22)');
+title('Model vs. All Y22 Data');
+
+
+
