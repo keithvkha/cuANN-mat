@@ -1,23 +1,18 @@
 function x_delay = delayshift(x,K)
     % x_delay = x[n-K]
     % This function delays x[n] by K samples by shifting the elements of x
-    % by K positions, and zero-pad the beginning
+    % by K positions by using circshift(), and zero-pad up to K elements in the beginning
 
-    % This function is meant for shifting 1D vector
-    % For shifting a matrix, please refer to delayshiftmat(), which does
-    % the shifting with a "shift operator matrix"
-
-    % x is a column vector
-    % x_delay is a column vector
+    % x are column vectors
+    % x_delay are a column vectors
     
     if(~exist('K', 'var'))
         K = 0;
     end
     
-    if(size(x,1) > 1)       % x is column vector
-        x_delay = [zeros(K,1); x(1:length(x)-K)];
-    elseif(size(x,2) > 1)   % x is row vector
-        x_delay = [zeros(1,K) x(1:length(x)-K)];
+    x_delay = circshift(x,K,1);
+    for i = 1:K
+        x_delay(i,:) = zeros(1,size(x,2));
     end
 
 end

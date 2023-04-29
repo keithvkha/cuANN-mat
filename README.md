@@ -6,6 +6,9 @@ This project is motivated by the need to customize conventional ANNs for special
 
 The code is developed in the style of functional programming to avoid any object-oriented abstraction so that user can easily customize the ANN for their regression problems in RF/Microwave and Physics.
 
+## Authors
+This package is developed by Keith Ha at Carleton University, with the support of Jinyuan Cui, and Prof. Q.J Zhang with the theory of Neural Networks and their special structures. 
+
 ## Installation
 MATLAB is required to run the files in the package.
 
@@ -53,4 +56,6 @@ GNU GPL
 [2] Qi-Jun Zhang, K. C. Gupta and V. K. Devabhaktuni, "Artificial neural networks for RF and microwave design - from theory to practice," in IEEE Transactions on Microwave Theory and Techniques, vol. 51, no. 4, pp. 1339-1350, April 2003, doi: 10.1109/TMTT.2003.809179.
 
 [3] Jianjun Xu, M. C. E. Yagoub, Runtao Ding and Qi Jun Zhang, "Exact adjoint sensitivity analysis for neural-based microwave modeling and design," in IEEE Transactions on Microwave Theory and Techniques, vol. 51, no. 1, pp. 226-237, Jan. 2003, doi: 10.1109/TMTT.2002.806910.
+
+[4] Oliver Nelles, "Nonlinear System Identification: From Classical Approaches to Neural Networks and Fuzzy Models", Springer, 2001.
 
