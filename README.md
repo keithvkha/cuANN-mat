@@ -21,10 +21,11 @@ Additional toolboxes that can be used:
 This package is originally written in MATLAB 2022. Most functions used in this package should be compatible with MATLAB 2013 and after. To add more compatibility of this package with older versions of MATLAB, please send me suggestions and/or pull requests to add to the repo. 
 
 ## Usage
-This package contains examples on how to use the customizable ANN core of the package. Currently, the package contains 3 examples:
+This package contains examples on how to use the customizable ANN core of the package. Currently, the package contains 4 examples:
  - Basic MLP for modeling the nonlinear DC characteristics of a transistor.
  - Adjoint Neural Network (AdjointNN) for modeling the DC characteristics and Y-parameters of a transistor.
  - Recurrent Neural Network (RNN) for modeling a digital filter with memory.
+ - RNN for modeling a nonlinear black-box power amplifier with memory.
 
 User can follow the documentation and comments in the examples to run the code.
 
